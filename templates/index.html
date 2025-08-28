@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="card">
+  <h1>Welcome</h1>
+  <p>Enter a simple PIN to start or join a collaboration workspace.</p>
+  <form method="post" class="row" style="gap: 0.5rem; align-items: flex-end;">
+    <label class="field">
+      <span>PIN</span>
+      <input type="text" name="pin" placeholder="e.g. 1234" value="{{ pin or '' }}" required />
+    </label>
+    <button type="submit" class="btn primary">Enter</button>
+  </form>
+</div>
+{% endblock %}

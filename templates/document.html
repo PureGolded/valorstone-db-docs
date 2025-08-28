@@ -1,0 +1,363 @@
+{% extends 'base.html' %}
+{% block meta %}
+  {% if is_shared %}
+    <meta property="og:title" content="{{ doc.name }}" />
+    <meta property="og:description" content="{{ doc.content.splitlines()[0][:200] if doc.content else '' }}" />
+  {% endif %}
+{% endblock %}
+{% block content %}
+<div class="row space-between">
+  <div class="row" style="gap:.5rem; align-items:center;">
+    <a class="btn" href="{{ '/docs' if not is_shared else '/' }}">← Back</a>
+    <h1 id="doc-name">{{ doc.name }}</h1>
+  </div>
+  <div class="row" style="gap:.5rem;">
+    {% if can_edit %}
+  <button id="toggleModeBtn" class="btn" title="Toggle edit mode">Edit</button>
+      <button id="saveBtn" class="btn" style="display:none;">Save</button>
+    {% endif %}
+    <button class="btn" onclick="shareDoc('{{ doc.id }}')">Share</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="row space-between">
+    <h2>Document</h2>
+    <div class="row" style="gap:.5rem; align-items:center;">
+      <span id="docUpdated" class="note"></span>
+      {% if not can_edit %}<span class="badge">Read-only</span>{% endif %}
+    </div>
+  </div>
+  <div class="row space-between" style="align-items:center; margin-bottom:.5rem;">
+    <div id="saveStatus" class="note" style="visibility:hidden;">Saved</div>
+  </div>
+  <div id="doc-editor" class="doc-editor"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/docs.js') }}"></script>
+<script id="doc-context" type="application/json">{{ {
+  'can_edit': can_edit|default(false),
+  'is_shared': is_shared|default(false),
+  'doc': doc,
+  'share': share|default(None)
+} | tojson | safe }}</script>
+<script>
+  let CAN_EDIT=false, IS_SHARED=false, DOC={}, SHARE=null;
+  try {
+    const ctxEl = document.getElementById('doc-context');
+    const ctx = JSON.parse(ctxEl ? ctxEl.textContent : '{}');
+    CAN_EDIT = !!ctx.can_edit; IS_SHARED = !!ctx.is_shared; DOC = ctx.doc || {}; SHARE = ctx.share || null;
+  } catch (e){ console.error('Failed to parse document context', e); }
+  let EDIT_MODE = false; // default read mode
+
+  function docRender(){
+    if (EDIT_MODE && CAN_EDIT){ renderEdit(); } else { renderReadOnly(); }
+    const saveBtn = document.getElementById('saveBtn');
+    if (saveBtn) saveBtn.style.display = (EDIT_MODE && CAN_EDIT) ? '' : 'none';
+    const toggle = document.getElementById('toggleModeBtn');
+    if (toggle) toggle.textContent = EDIT_MODE ? 'View' : 'Edit';
+  // toggle mode class on container for styling
+  const container = document.getElementById('doc-editor');
+  if (container){ container.classList.toggle('edit-mode', EDIT_MODE && CAN_EDIT); container.classList.toggle('read-mode', !(EDIT_MODE && CAN_EDIT)); }
+  if (EDIT_MODE && CAN_EDIT){ const area = document.querySelector('#doc-editor .code-area'); if (area) area.focus(); }
+  // updated at
+  const upd = document.getElementById('docUpdated');
+  if (upd && DOC.updated_at){ upd.textContent = 'Last updated: ' + new Date(DOC.updated_at*1000).toLocaleString(); }
+  }
+
+  function renderReadOnly(){
+    const root = document.getElementById('doc-editor');
+    root.innerHTML = '';
+    const container = document.createElement('div');
+    container.className = 'code-view';
+    const content = DOC.content || '';
+    const lines = content.split('\n');
+    const lnoEls = []; const rows = [];
+    lines.forEach((ln,i)=>{
+      const row = document.createElement('div'); row.className='code-row';
+      const num = document.createElement('div'); num.className='code-lno';
+      // note count badge
+      const lineNo = i+1;
+      const lineNotes = Object.values(DOC.notes||{}).filter(n=> lineNo >= n.start_line && lineNo <= n.end_line).sort((a,b)=> a.created_at-b.created_at);
+      if (lineNotes.length){
+        const badge = document.createElement('span'); badge.className='note-badge'; badge.textContent = String(lineNotes.length);
+        badge.title = lineNotes.slice(0,3).map(n=> `[${new Date(n.created_at*1000).toLocaleString()}] ${(n.author||'')}: ${n.text}`).join('\n') + (lineNotes.length>3? `\n(+${lineNotes.length-3} more)` : '');
+        badge.addEventListener('click', (ev)=>{ ev.stopPropagation(); showNotes(lineNo); });
+        num.appendChild(badge);
+      }
+      num.appendChild(document.createTextNode(String(lineNo)));
+      const text = document.createElement('div'); text.className='code-text'; text.innerHTML = renderMarkdownLine(ln);
+      // note indicators
+      const hasNotes = Object.values(DOC.notes||{}).some(n=> (i+1) >= n.start_line && (i+1) <= n.end_line);
+      if (hasNotes){ num.classList.add('has-notes'); num.title='Notes on this line'; }
+      // link clicks
+      text.querySelectorAll('a[data-link]').forEach(a=> a.addEventListener('click', (ev)=> handleLinkClick(ev, a)));
+      // click line number to view/add notes
+      num.style.cursor='pointer';
+      num.addEventListener('click', ()=> showNotes(i+1));
+      // click on text area (not on links) to add note
+      text.addEventListener('click', (ev)=>{
+        if (ev.target.closest('a')) return; // links keep default behavior
+        addNoteForLine(lineNo);
+      });
+      row.appendChild(num); row.appendChild(text);
+      container.appendChild(row);
+      lnoEls.push(num); rows.push(row);
+    });
+    // contextual line number visibility: hovered line ±2
+    rows.forEach((row, idx)=>{
+      row.addEventListener('mouseenter', ()=>{
+        for (let j=0;j<lnoEls.length;j++){
+          if (Math.abs(j-idx) <= 2) lnoEls[j].classList.add('visible');
+          else lnoEls[j].classList.remove('visible');
+        }
+      });
+    });
+    container.addEventListener('mouseleave', ()=>{ lnoEls.forEach(el=> el.classList.remove('visible')); });
+    root.appendChild(container);
+  }
+
+  function renderEdit(){
+    const root = document.getElementById('doc-editor');
+    root.innerHTML = '';
+    const wrap = document.createElement('div'); wrap.className='code-editor';
+    const gutter = document.createElement('div'); gutter.className='code-gutter';
+    const area = document.createElement('textarea'); area.className='code-area'; area.spellcheck=false;
+    area.value = DOC.content || '';
+    wrap.appendChild(gutter); wrap.appendChild(area); root.appendChild(wrap);
+    const updateGutter = ()=>{
+      const lines = area.value.split('\n').length || 1;
+      const frag = document.createDocumentFragment();
+      for (let i=1;i<=lines;i++){
+        const ln = document.createElement('div'); ln.textContent = String(i);
+        // mark notes
+        const hasNotes = Object.values(DOC.notes||{}).some(n=> i >= n.start_line && i <= n.end_line);
+        if (hasNotes) ln.classList.add('has-notes');
+        ln.addEventListener('click', ()=> showNotes(i));
+        frag.appendChild(ln);
+      }
+      gutter.innerHTML = ''; gutter.appendChild(frag);
+    };
+    const syncScroll = ()=>{ gutter.scrollTop = area.scrollTop; };
+    area.addEventListener('scroll', syncScroll);
+    area.addEventListener('input', ()=>{ updateGutter(); queSave(); });
+    area.addEventListener('keydown', (ev)=>{
+      // Insert link chooser
+      if (ev.key === '$' && !ev.ctrlKey && !ev.metaKey){
+        ev.preventDefault();
+        openSlashChooser((item)=> insertLinkAtCursor(area, item));
+        return;
+      }
+      // Indent with 4 spaces on Tab
+      if (ev.key === 'Tab' && !ev.shiftKey && !ev.ctrlKey && !ev.metaKey){
+        ev.preventDefault();
+        const start = area.selectionStart; const end = area.selectionEnd;
+        const v = area.value; const ins = '    ';
+        area.value = v.slice(0,start) + ins + v.slice(end);
+        const pos = start + ins.length; area.setSelectionRange(pos, pos);
+        updateGutter(); queSave();
+        return;
+      }
+    });
+    updateGutter();
+    syncScroll();
+  }
+
+  function renderLineHTML(ln){
+    if (!ln) return '';
+    // escape HTML first
+    let s = ln.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    // 1) [Label]([[type:rest]]) -> internal data-link
+    s = s.replace(/\[([^\]]+)\]\(\[\[(doc|db|table|col):([^\]]+)\]\]\)/g, (m, text, type, rest)=>{
+      const data = `${type}:${rest}`;
+      return `<a href="#" data-link="${encodeURIComponent(data)}">${text}</a>`;
+    });
+    // 2) replace bare [[...]] custom links
+    s = s.replace(/\[\[(doc|db|table|col):([^\]]+)\]\]/g, (m, type, rest)=>{
+      const data = `${type}:${rest}`;
+      let label = '';
+      if (type==='doc'){
+        label = `doc:${rest.split(':')[0]}`;
+      } else if (type==='col'){
+        label = rest.split(':').slice(-1)[0];
+      } else if (type==='table'){
+        label = rest.split(':').slice(-1)[0];
+      } else if (type==='db'){
+        label = rest.split(':').slice(-1)[0];
+      } else {
+        label = data;
+      }
+      return `<a href="#" data-link="${encodeURIComponent(data)}">${label}</a>`;
+    });
+    // 3) basic markdown links [text](url) for external links
+    s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, text, url)=> `<a href="${url}" target="_blank" rel="noopener">${text}</a>`);
+    return s;
+  }
+
+  // Lightweight per-line markdown renderer for read mode with visual nested lists
+  function renderMarkdownLine(ln){
+    const raw = (ln || '').replace(/\t/g, '    ');
+    const trimmed = raw.trim();
+    if (trimmed === '') return '<br>';
+    // Detect headings and blockquotes
+    let m;
+    if ((m = trimmed.match(/^(#{1,6})\s+(.*)$/))){
+      const lvl = m[1].length; return `<h${lvl}>${renderInline(renderLineHTML(m[2]))}</h${lvl}>`;
+    }
+    if ((m = trimmed.match(/^>\s+(.*)$/))){
+      return `<blockquote>${renderInline(renderLineHTML(m[1]))}</blockquote>`;
+    }
+    // Detect nested lists based on leading spaces (4 spaces per level)
+    let ml;
+    if ((ml = raw.match(/^(\s*)([-*+])\s+(.*)$/))){
+      const level = Math.floor(ml[1].length / 4);
+      const content = renderInline(renderLineHTML(ml[3]));
+      return `<div class=\"md-li md-ul\" style=\"--lvl:${level}\">• ${content}</div>`;
+    }
+    if ((ml = raw.match(/^(\s*)(\d+)\.\s+(.*)$/))){
+      const level = Math.floor(ml[1].length / 4);
+      const num = ml[2]; const content = renderInline(renderLineHTML(ml[3]));
+      return `<div class=\"md-li md-ol\" style=\"--lvl:${level}\">${num}. ${content}</div>`;
+    }
+    // Paragraph
+    const html = renderInline(renderLineHTML(raw));
+    return `<p>${html}</p>`;
+  }
+
+  function renderInline(text){
+    let s = text || '';
+    s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    return s;
+  }
+
+  async function handleLinkClick(ev, a){
+    ev.preventDefault();
+    const data = decodeURIComponent(a.getAttribute('data-link'));
+    const [type, rest] = data.split(':', 2);
+    if (type === 'doc'){
+      const docId = rest.split('#')[0];
+      if (IS_SHARED){
+        const res = await fetch(`/api/shared/resolve/${SHARE.id}/doc/${docId}`);
+        const j = await res.json();
+        if (j.ok && j.allowed && j.url){ location.href = j.url; }
+        else { alert('You do not have access to that document.'); }
+      } else {
+        location.href = `/docs/d/${docId}`;
+      }
+    } else if (!IS_SHARED) {
+      // db/table/col links only for editors
+      const parts = rest.split(':');
+      const dbId = parts[0];
+      location.href = `/db/${dbId}`;
+    }
+  }
+
+  function buildTargetFromItem(item){
+    let label = item.name || item.heading || item.label || 'link';
+    let target = '';
+  if (item.type === 'doc') target = `[[doc:${item.id}]]`;
+    else if (item.type === 'heading') target = `[[doc:${item.doc_id}#${label.replace(/\s+/g,'-').toLowerCase()}]]`;
+    else if (item.type === 'database') target = `[[db:${item.db_id}:${item.slug}]]`;
+    else if (item.type === 'table') target = `[[table:${item.db_id}:${item.table_id}:${item.slug}]]`;
+    else if (item.type === 'column') target = `[[col:${item.db_id}:${item.table_id}:${item.column_id}:${item.label}]]`;
+    return {label, target};
+  }
+  function insertLinkAtCursor(area, item){
+    const {label, target} = buildTargetFromItem(item);
+    const text = area.value; const start = area.selectionStart; const end = area.selectionEnd;
+    const injection = `[${label}](${target})`;
+    area.value = text.slice(0,start) + injection + text.slice(end);
+    const pos = start + injection.length;
+    area.setSelectionRange(pos, pos); area.focus();
+    queSave();
+  }
+
+  async function addNoteForLine(line){
+    const text = prompt(`Note for line ${line}`); if (!text) return;
+    await addNoteForRange(line, line, text);
+  }
+
+  async function addNoteForRange(start, end, textOpt){
+    const text = textOpt || prompt(`Note for lines ${start}-${end}`); if (!text) return;
+    const payload = {start_line: start, end_line: end, text, author: ''};
+    let res;
+    if (IS_SHARED){
+      res = await fetch(`/api/shared/d/${SHARE.id}/${DOC.id}/notes`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    } else {
+      res = await fetch(`/api/docs/${DOC.id}/notes`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    }
+    if (res.ok){ const j = await res.json(); DOC.notes = DOC.notes || {}; DOC.notes[j.note.id] = j.note; renderEditor(); }
+  }
+
+  function getContentFromEditor(){
+    if (!CAN_EDIT || !EDIT_MODE) return DOC.content;
+    const area = document.querySelector('#doc-editor .code-area');
+    return area ? area.value : DOC.content;
+  }
+
+  let saveTimer=null;
+  function queSave(){ if (!CAN_EDIT || !EDIT_MODE) return; if (saveTimer) clearTimeout(saveTimer); saveTimer = setTimeout(saveDoc, 750); }
+
+  async function saveDoc(){
+    if (!CAN_EDIT) return;
+    const content = getContentFromEditor();
+    const res = await fetch(`/api/docs/${DOC.id}`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({content})});
+    if (res.ok){
+      const j = await res.json(); Object.assign(DOC, j.document); DOC.content = j.document.content;
+      // show transient saved status
+      const el = document.getElementById('saveStatus');
+      if (el){ el.textContent = 'Saved'; el.style.visibility = 'visible'; clearTimeout(el._t); el._t = setTimeout(()=>{ el.style.visibility = 'hidden'; }, 1500); }
+    }
+  }
+
+  function showNotes(line){
+    const notes = Object.values(DOC.notes||{}).filter(n=> line >= n.start_line && line <= n.end_line);
+    if (notes.length===0) return;
+    const body = document.createElement('div');
+    for (const n of notes){
+      const div = document.createElement('div'); div.className='subcard';
+      div.innerHTML = `<div class='row space-between'><strong>${escapeHtml(n.author||'Note')}</strong><span class='note'>${new Date(n.created_at*1000).toLocaleString()}</span></div><div>${escapeHtml(n.text)}</div>`;
+      body.appendChild(div);
+    }
+    Modal.open({ title: `Notes on line ${line}`, body, actions:[{label:'Close'}]});
+  }
+
+  async function shareDoc(id){
+    const res = await fetch(`/api/docs/${id}/share`, {method:'POST'});
+    const j = await res.json(); if (j.ok){ navigator.clipboard.writeText(j.url); alert('Share URL copied to clipboard:\n'+j.url); }
+  }
+
+  function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c])); }
+
+  document.addEventListener('DOMContentLoaded', ()=>{
+    try {
+      if (CAN_EDIT){
+        const toggle = document.getElementById('toggleModeBtn');
+        if (toggle) toggle.addEventListener('click', async ()=>{
+          if (EDIT_MODE){
+            // going from Edit -> View: keep latest text and save
+            DOC.content = getContentFromEditor();
+            try { await saveDoc(); } catch(e) { console.warn('Save on toggle failed', e); }
+            EDIT_MODE = false;
+          } else {
+            EDIT_MODE = true;
+          }
+          docRender();
+        });
+        const saveBtn = document.getElementById('saveBtn');
+        if (saveBtn) saveBtn.addEventListener('click', saveDoc);
+        // Ctrl+S to save while editing
+        window.addEventListener('keydown', (ev)=>{
+          if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 's'){
+            ev.preventDefault(); saveDoc();
+          }
+        });
+      }
+      docRender();
+    } catch (e){ console.error(e); }
+  });
+</script>
+{% endblock %}

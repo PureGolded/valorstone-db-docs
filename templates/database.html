@@ -1,0 +1,539 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row space-between">
+  <div class="row" style="gap:.5rem; align-items: center;">
+    <a class="btn" href="/workspace">← Back</a>
+    <h1 id="db-name">{{ db.name }}</h1>
+  </div>
+  <div class="row" style="gap:.5rem;">
+    <button class="btn" title="Rename this database" onclick="promptRenameDb()">Rename</button>
+    <button class="btn" title="Edit a note/description for this database" onclick="editDbNote()">Note</button>
+    <button class="btn" title="Create a duplicate of this database" onclick="duplicateDatabase('{{ db_id }}')">Duplicate</button>
+    <button class="btn danger" title="Delete this database" onclick="deleteDatabase('{{ db_id }}')">Delete</button>
+  </div>
+</div>
+<p id="db-note" class="note">{{ db.note }}</p>
+
+<div class="stack">
+  <div class="card">
+    <div class="row space-between">
+      <h2 title="Tables hold columns. Each row in a table is a record.">Tables</h2>
+      <button class="btn primary" title="Add a table to this database" onclick="createTable()">+ Table</button>
+    </div>
+    <div id="table-list"></div>
+  </div>
+  <div class="card">
+    <div class="row space-between">
+      <h2 title="Visual map of tables and their references">ER Diagram</h2>
+      <div class="row" style="gap:.5rem;">
+        <button class="btn" title="Auto-arrange tables" onclick="autoLayout()">Auto layout</button>
+        <button class="btn" title="Fit all tables to view" onclick="fitView()">Fit</button>
+      </div>
+    </div>
+  <div id="er-canvas" class="er-canvas" tabindex="0"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const DB_ID = '{{ db_id }}';
+  document.addEventListener('DOMContentLoaded', ()=>{ try { refresh(); } catch(e){ console.error(e); } });
+
+  async function refresh() {
+    const res = await fetch('/api/state');
+    const state = await res.json();
+    const db = state[DB_ID];
+    if (!db) { location.href = '/workspace'; return; }
+    document.getElementById('db-name').textContent = db.name;
+    document.getElementById('db-note').textContent = db.note || '';
+  renderTables(db);
+  renderER(db);
+  }
+
+  async function promptRenameDb() {
+    const state = await fetchState();
+    const db = state[DB_ID];
+    const form = Modal.inputs([
+      {key:'name', label:'Database Name', type:'text', value: db.name, help:'Rename this database design for clarity.'}
+    ]);
+    Modal.open({
+      title: 'Rename Database',
+      body: form,
+      actions: [
+        {label:'Cancel'},
+        {label:'Save', className:'primary', onClick: async ()=>{
+          const v = form.getValues();
+          if (!v.name) return false;
+          await fetch(`/api/databases/${DB_ID}`, {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: v.name})});
+          await refresh();
+        }}
+      ]
+    });
+  }
+
+  async function editDbNote() {
+    const state = await fetchState();
+    const db = state[DB_ID];
+    const form = Modal.inputs([
+      {key:'note', label:'Database Note', type:'textarea', value: db.note || '', help:'Describe purpose, environment, or any context.'}
+    ]);
+    Modal.open({
+      title: 'Edit Database Note',
+      body: form,
+      actions: [
+        {label:'Cancel'},
+        {label:'Save', className:'primary', onClick: async ()=>{
+          const v = form.getValues();
+          await fetch(`/api/databases/${DB_ID}`, {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({note: v.note || ''})});
+          await refresh();
+        }}
+      ]
+    });
+  }
+
+  async function createTable() {
+    const form = Modal.inputs([
+      {key:'name', label:'Table Name', type:'text', value:'New Table', help:'Give your table a clear, short name.'}
+    ]);
+    Modal.open({
+      title: 'New Table',
+      body: form,
+      actions: [
+        {label:'Cancel'},
+        {label:'Create', className:'primary', onClick: async ()=>{
+          const v = form.getValues();
+          if (!v.name) return false;
+          await fetch(`/api/databases/${DB_ID}/tables`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: v.name})});
+          await refresh();
+        }}
+      ]
+    });
+  }
+
+  async function deleteDatabase(dbId) {
+    const body = document.createElement('div'); body.innerHTML = '<p>Delete this database?</p>';
+    Modal.open({ title:'Delete Database', body, actions:[ {label:'Cancel'}, {label:'Delete', className:'danger', onClick: async()=>{ await fetch(`/api/databases/${dbId}`, {method: 'DELETE'}); location.href = '/workspace'; }} ]});
+  }
+
+  function renderTables(db) {
+    const root = document.getElementById('table-list');
+    root.innerHTML = '';
+    const entries = Object.entries(db.tables);
+    if (entries.length === 0) {
+      root.innerHTML = '<div class="muted">No tables yet.</div>';
+      return;
+    }
+    for (const [tId, t] of entries) {
+      const el = document.createElement('div');
+      el.className = 'subcard';
+      el.innerHTML = `
+        <div class="row space-between">
+          <div>
+            <strong>${escapeHtml(t.name)}</strong>
+            <span class="note">${escapeHtml(t.note || '')}</span>
+          </div>
+          <div class="row" style="gap:.25rem;">
+            <button class="btn" onclick="renameTable('${tId}', '${encodeURIComponent(t.name)}')">Rename</button>
+            <button class="btn" onclick="noteTable('${tId}')">Note</button>
+            <button class="btn danger" onclick="deleteTable('${tId}')">Delete</button>
+          </div>
+        </div>
+        <div class="columns" id="cols-${tId}"></div>
+        <div class="row" style="gap:.5rem;">
+          <button class="btn" onclick="createColumn('${tId}')">+ Column</button>
+        </div>
+      `;
+  root.appendChild(el);
+  renderColumns(db, tId);
+    }
+  }
+
+  function renderColumns(db, tId) {
+    const root = document.getElementById(`cols-${tId}`);
+    root.innerHTML = '';
+    const t = db.tables[tId];
+    let colsArr = Object.entries(t.columns);
+    colsArr.sort((a,b)=>{
+      const ao = (a[1] && typeof a[1].order === 'number') ? a[1].order : 0;
+      const bo = (b[1] && typeof b[1].order === 'number') ? b[1].order : 0;
+      return ao - bo;
+    });
+    // Measure max character widths for name and datatype to align consistently
+    let maxNameLen = 0, maxTypeLen = 0;
+    for (const [, c] of colsArr){
+      maxNameLen = Math.max(maxNameLen, (c.name || '').length);
+      maxTypeLen = Math.max(maxTypeLen, String(c.datatype || '').length);
+    }
+    // Approximate width: 8px per char + padding
+    const nameW = Math.min(420, Math.max(120, maxNameLen * 8 + 16));
+    const typeW = Math.min(220, Math.max(100, maxTypeLen * 8 + 16));
+  root.style.setProperty('--name-w', nameW + 'px');
+  root.style.setProperty('--type-w', typeW + 'px');
+
+    for (const [cId, c] of colsArr) {
+      const el = document.createElement('div');
+      el.className = 'column-row';
+      const ref = c.foreign_ref;
+      const props = [
+        c.is_primary ? '<span class="icon warn" data-tooltip="Primary Key: Uniquely identifies each row in this table (like an ID).">🔑</span>' : '',
+        !c.is_nullable ? '<span class="icon deny" data-tooltip="Required: This column must always have a value (cannot be empty).">●</span>' : '',
+        c.default ? `<span class='badge' data-tooltip="Default: Value used when no input is provided.">DEF=${escapeHtml(c.default)}</span>` : '',
+        ref ? '<span class="icon warn" data-tooltip="Reference: This column points to another table\'s identifier (a foreign key).">↗</span>' : ''
+      ].filter(Boolean).join(' ');
+
+      const noteIcon = c.note ? `<span class="icon" data-tooltip="${escapeHtml(c.note)}">i</span>` : '';
+
+      el.style.setProperty('--name-w', nameW + 'px');
+      el.style.setProperty('--type-w', typeW + 'px');
+      el.innerHTML = `
+        <div class="row" style="gap:.5rem; align-items:center; min-width:0;">
+          <strong class="col-name">${escapeHtml(c.name)}</strong>
+          ${noteIcon}
+        </div>
+        <div><span class="badge" data-tooltip="Datatype: The kind of data stored here.">${escapeHtml(c.datatype)}</span></div>
+        <div class="row" style="gap:.25rem; align-items:center; min-width:0;">${props}</div>
+  <div class="row actions" style="gap:.25rem;">
+          <button class="btn" title="Edit column properties and reference" onclick="editColumn('${tId}', '${cId}')">Edit</button>
+          <button class="btn danger" onclick="deleteColumn('${tId}', '${cId}')">Delete</button>
+        </div>
+      `;
+      root.appendChild(el);
+    }
+  }
+
+  async function renameTable(tId, currentEnc) {
+    const current = decodeURIComponent(currentEnc);
+    const form = Modal.inputs([
+      {key:'name', label:'Table Name', type:'text', value: current, help:'Update the table name.'}
+    ]);
+    Modal.open({
+      title: 'Rename Table',
+      body: form,
+      actions: [
+        {label:'Cancel'},
+        {label:'Save', className:'primary', onClick: async ()=>{
+          const v = form.getValues();
+          if (!v.name) return false;
+          await fetch(`/api/databases/${DB_ID}/tables/${tId}`, {method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({name: v.name})});
+          await refresh();
+        }}
+      ]
+    });
+  }
+  async function noteTable(tId) {
+    const state = await fetchState();
+    const db = state[DB_ID];
+    const current = db.tables[tId].note || '';
+    const form = Modal.inputs([{key:'note', label:'Table Note', type:'textarea', value: current, help:'Add helpful context for this table.'}]);
+    Modal.open({
+      title: 'Edit Table Note',
+      body: form,
+      actions: [
+        {label:'Cancel'},
+        {label:'Save', className:'primary', onClick: async ()=>{
+          const v = form.getValues();
+          await fetch(`/api/databases/${DB_ID}/tables/${tId}`, {method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({note: v.note || ''})});
+          await refresh();
+        }}
+      ]
+    });
+  }
+  async function deleteTable(tId) {
+    const body = document.createElement('div');
+    body.innerHTML = '<p>Are you sure you want to delete this table?</p>';
+    Modal.open({ title:'Delete Table', body, actions:[ {label:'Cancel'}, {label:'Delete', className:'danger', onClick: async()=>{ await fetch(`/api/databases/${DB_ID}/tables/${tId}`, {method: 'DELETE'}); await refresh(); }} ]});
+  }
+
+  async function createColumn(tId) {
+    const state = await fetchState();
+    const db = state[DB_ID];
+    const tablesMap = {};
+    for (const [tid, t] of Object.entries(db.tables)) tablesMap[tid] = {label:t.name, columns:t.columns};
+    const form = makeColumnForm({tablesMap});
+    Modal.open({
+      title: 'New Column',
+      body: form,
+      actions: [
+        {label:'Cancel'},
+        {label:'Create', className:'primary', onClick: async ()=>{
+          const v = form.getValues();
+          const foreign_ref = v.ref_table && v.ref_column ? {table_id: v.ref_table, column_id: v.ref_column} : null;
+          const payload = {name: v.name, datatype: v.datatype, is_primary: !!v.is_primary, is_nullable: !!v.is_nullable, default: v.default || null, note: v.note, foreign_ref};
+          const res = await fetch(`/api/databases/${DB_ID}/tables/${tId}/columns`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+          if (res.ok) { await refresh(); }
+        }}
+      ]
+    });
+  }
+
+  async function editColumn(tId, cId) {
+    const state = await fetchState();
+    const c = state[DB_ID].tables[tId].columns[cId];
+    const tablesMap = {};
+    for (const [tid, t] of Object.entries(state[DB_ID].tables)) tablesMap[tid] = {label:t.name, columns:t.columns};
+    const form = makeColumnForm({name:c.name, datatype:c.datatype, is_primary:c.is_primary, is_nullable:c.is_nullable, def:c.default, note:c.note, foreign_ref:c.foreign_ref, tablesMap});
+    Modal.open({
+      title: 'Edit Column',
+      body: form,
+      actions: [
+        {label:'Cancel'},
+        {label:'Save', className:'primary', onClick: async ()=>{
+          const v = form.getValues();
+          const foreign_ref = v.ref_table && v.ref_column ? {table_id: v.ref_table, column_id: v.ref_column} : null;
+          const payload = {name: v.name, datatype: v.datatype, is_primary: !!v.is_primary, is_nullable: !!v.is_nullable, default: v.default || null, note: v.note, foreign_ref};
+          await fetch(`/api/databases/${DB_ID}/tables/${tId}/columns/${cId}`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+          await refresh();
+        }}
+      ]
+    });
+  }
+  async function deleteColumn(tId, cId) {
+    const body = document.createElement('div');
+    body.innerHTML = '<p>Delete this column?</p>';
+    Modal.open({ title:'Delete Column', body, actions:[ {label:'Cancel'}, {label:'Delete', className:'danger', onClick: async()=>{ await fetch(`/api/databases/${DB_ID}/tables/${tId}/columns/${cId}`, {method: 'DELETE'}); await refresh(); }} ]});
+  }
+
+  async function duplicateDatabase(dbId) {
+    await fetch(`/api/databases/${dbId}/duplicate`, {method: 'POST'});
+    refresh();
+  }
+
+  // ======== ER Canvas ========
+  let erState = { db: null, panX: 0, panY: 0, zoom: 1, dragging: null, dragStart: null };
+
+  function getDiagram(db){
+    if (!db.diagram) db.diagram = {};
+    if (!db.diagram.positions) db.diagram.positions = {};
+    if (typeof db.diagram.zoom !== 'number') db.diagram.zoom = 1;
+    return db.diagram;
+  }
+
+  function renderER(db){
+    erState.db = db;
+    const container = document.getElementById('er-canvas');
+    container.innerHTML = '';
+
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('width', '100%');
+    svg.setAttribute('height', '480');
+    svg.classList.add('er-svg');
+
+  // Arrow marker for edge direction
+  const defs = document.createElementNS(svgNS, 'defs');
+  const marker = document.createElementNS(svgNS, 'marker');
+  marker.setAttribute('id', 'arrow-head');
+  marker.setAttribute('markerWidth', '10');
+  marker.setAttribute('markerHeight', '7');
+  marker.setAttribute('refX', '9');
+  marker.setAttribute('refY', '3.5');
+  marker.setAttribute('orient', 'auto');
+  marker.setAttribute('markerUnits', 'strokeWidth');
+  const arrowPath = document.createElementNS(svgNS, 'path');
+  arrowPath.setAttribute('d', 'M 0 0 L 10 3.5 L 0 7 z');
+  arrowPath.setAttribute('fill', '#6ea8fe');
+  marker.appendChild(arrowPath);
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+
+    const g = document.createElementNS(svgNS, 'g');
+    svg.appendChild(g);
+
+    // background to capture panning
+    const bg = document.createElementNS(svgNS, 'rect');
+    bg.setAttribute('x', '-5000'); bg.setAttribute('y', '-5000'); bg.setAttribute('width', '10000'); bg.setAttribute('height', '10000');
+    bg.setAttribute('fill', 'transparent');
+    g.appendChild(bg);
+
+    const diagram = getDiagram(db);
+    erState.zoom = diagram.zoom || 1;
+    applyTransform(g);
+
+  // Create nodes (tables)
+  const nodeEls = {}; // tId -> {group, cx, cy, r}
+    const edges = []; // {from: {t,c}, to: {t,c}, label:string}
+
+    const tablesEntries = Object.entries(db.tables);
+    // initial layout if no positions
+  const needLayout = Object.keys(diagram.positions).length === 0 && tablesEntries.length > 0;
+  const circleMode = diagram.mode === 'circle';
+    const colsPerRow = Math.ceil(Math.sqrt(tablesEntries.length));
+    let idx = 0;
+    for (const [tId, t] of tablesEntries){
+      let pos = diagram.positions[tId];
+      if (!pos){
+        if (needLayout){
+          const row = Math.floor(idx / colsPerRow);
+          const col = idx % colsPerRow;
+          pos = { x: 100 + col*280, y: 80 + row*220 };
+        } else {
+          pos = { x: 100 + idx*60, y: 100 + idx*40 };
+        }
+        diagram.positions[tId] = pos;
+      }
+      idx++;
+  const r = 56; // slightly smaller for compact layout
+      const cx = circleMode ? pos.x : (pos.x + 120);
+      const cy = circleMode ? pos.y : (pos.y + 60);
+      const group = document.createElementNS(svgNS, 'g');
+      group.setAttribute('data-table-id', tId);
+      group.setAttribute('transform', `translate(${cx}, ${cy})`);
+      const circle = document.createElementNS(svgNS, 'circle');
+      circle.setAttribute('cx', '0'); circle.setAttribute('cy', '0'); circle.setAttribute('r', String(r));
+      circle.setAttribute('fill', '#1d2330'); circle.setAttribute('stroke', '#2a313d');
+      group.appendChild(circle);
+  const label = document.createElementNS(svgNS, 'text');
+  label.setAttribute('x', '0'); label.setAttribute('y', '4'); label.setAttribute('fill', '#e7eaf0'); label.setAttribute('font-weight', '700');
+  label.setAttribute('text-anchor', 'middle');
+  label.classList.add('er-node-label');
+  label.dataset.baseSize = '12';
+      label.textContent = t.name;
+      group.appendChild(label);
+      // Build edges based on columns (no column rendering)
+      let colsList = Object.entries(t.columns);
+      colsList.sort((a,b)=>{
+        const ao = (a[1] && typeof a[1].order === 'number') ? a[1].order : 0;
+        const bo = (b[1] && typeof b[1].order === 'number') ? b[1].order : 0;
+        return ao - bo;
+      });
+      for (const [cId, c] of colsList){
+        if (c.foreign_ref){
+          edges.push({ from: {t:tId, c:cId}, to: {t: c.foreign_ref.table_id, c: c.foreign_ref.column_id}, label: `${t.name}.${c.name}` });
+        }
+      }
+      nodeEls[tId] = { group, cx, cy, r };
+      g.appendChild(group);
+    }
+
+    // Draw straight edges between circle perimeters with labels
+    function edgePoints(a, b){
+      const dx = b.cx - a.cx, dy = b.cy - a.cy; const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len;
+      const start = { x: a.cx + a.r * ux, y: a.cy + a.r * uy };
+      const end = { x: b.cx - b.r * ux, y: b.cy - b.r * uy };
+      return { start, end };
+    }
+    for (const e of edges){
+      const a = nodeEls[e.from.t];
+      const b = nodeEls[e.to.t];
+      if (!a || !b) continue;
+      const pts = edgePoints(a, b);
+      const path = document.createElementNS(svgNS, 'path');
+      const d = `M ${pts.start.x} ${pts.start.y} L ${pts.end.x} ${pts.end.y}`;
+      path.setAttribute('d', d);
+      path.setAttribute('stroke', '#6ea8fe');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke-width', '2');
+      path.setAttribute('opacity', '0.9');
+      path.setAttribute('marker-end', 'url(#arrow-head)');
+      g.insertBefore(path, g.firstChild.nextSibling);
+      // label near midpoint
+  const tTo = db.tables[e.to.t];
+  const cTo = tTo && tTo.columns[e.to.c];
+  const slug = s => (s||'').toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9\-_.]/g,'').replace(/-+/g,'-');
+  const toLabel = tTo && cTo ? `${slug(tTo.name)}.${slug(cTo.name)}` : (cTo? slug(cTo?.name): e.to.c);
+      const label = document.createElementNS(svgNS, 'text');
+      label.setAttribute('fill', '#cbd5e1'); label.setAttribute('text-anchor', 'middle');
+      label.classList.add('er-edge-label');
+      label.dataset.baseSize = '12';
+      const midx = (pts.start.x + pts.end.x) / 2, midy = (pts.start.y + pts.end.y) / 2;
+      label.setAttribute('x', String(midx)); label.setAttribute('y', String(midy - 6));
+  const from = db.tables[e.from.t];
+  const fc = from && from.columns[e.from.c];
+  const fromLabel = from && fc ? `${slug(from.name)}.${slug(fc.name)}` : e.label;
+  label.textContent = `${fromLabel} → ${toLabel}`;
+      g.appendChild(label);
+    }
+    // adjust text sizes to zoom level for readability
+    updateScaledText();
+
+    // Pan/zoom
+    let panning = false; let last = null;
+    svg.addEventListener('wheel', (ev)=>{
+      ev.preventDefault();
+      const factor = ev.deltaY < 0 ? 1.1 : 0.9;
+      erState.zoom = Math.max(0.3, Math.min(2.5, erState.zoom * factor));
+      applyTransform(g);
+      updateScaledText();
+      saveDiagram();
+    }, {passive:false});
+    svg.addEventListener('mousedown', (ev)=>{ if (ev.target === svg || ev.target === bg){ panning = true; last = {x:ev.clientX, y:ev.clientY}; }});
+  svg.addEventListener('mousemove', (ev)=>{ if (!panning) return; const dx = ev.clientX - last.x; const dy = ev.clientY - last.y; last = {x:ev.clientX, y:ev.clientY}; erState.panX += dx; erState.panY += dy; applyTransform(g); updateScaledText(); });
+  window.addEventListener('mouseup', ()=>{ if (panning){ panning = false; saveDiagram(); }});
+
+    // Drag tables
+    svg.addEventListener('mousedown', (ev)=>{
+      const tbl = ev.target.closest('g[data-table-id]');
+      if (tbl){
+        const tId = tbl.dataset.tableId;
+        erState.dragging = { tId };
+        erState.dragStart = { x: ev.clientX, y: ev.clientY };
+      }
+    });
+    svg.addEventListener('mousemove', (ev)=>{
+      if (!erState.dragging) return;
+      const tId = erState.dragging.tId;
+      const d = getDiagram(db);
+    const pos = d.positions[tId];
+      const dx = (ev.clientX - erState.dragStart.x) / erState.zoom;
+      const dy = (ev.clientY - erState.dragStart.y) / erState.zoom;
+      erState.dragStart = { x: ev.clientX, y: ev.clientY };
+    // Convert to center coordinates once if still legacy
+    if (diagram.mode !== 'circle') { diagram.mode = 'circle'; pos.x = pos.x + 120; pos.y = pos.y + 60; }
+    pos.x += dx; pos.y += dy;
+    nodeEls[tId].group.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
+      // update anchors for edges if re-rendered next time
+    });
+    window.addEventListener('mouseup', ()=>{ if (erState.dragging){ erState.dragging = null; saveDiagram(); setTimeout(()=>renderER(db), 0); }});
+
+  container.appendChild(svg);
+  // ensure labels are correctly scaled on first render
+  updateScaledText();
+  }
+
+  function applyTransform(g){
+  g.setAttribute('transform', `translate(${erState.panX}, ${erState.panY}) scale(${erState.zoom})`);
+  // keep text sizes in a readable range as zoom changes
+  updateScaledText();
+  }
+
+  function updateScaledText(){
+    const scale = erState.zoom || 1;
+    const clamp = (v,min,max)=>Math.max(min, Math.min(max, v));
+    // Compensate for zoom: smaller zoom -> larger base font to preserve legibility
+    const nodeSize = clamp(12 * (1/scale), 10, 20);
+    const edgeSize = clamp(12 * (1/scale), 10, 18);
+    document.querySelectorAll('#er-canvas .er-node-label').forEach(el=>{
+      el.setAttribute('font-size', String(nodeSize));
+    });
+    document.querySelectorAll('#er-canvas .er-edge-label').forEach(el=>{
+      el.setAttribute('font-size', String(edgeSize));
+    });
+  }
+
+  async function saveDiagram(){
+    // Persist diagram positions and zoom using current in-memory state to avoid losing drag updates
+    const current = erState.db;
+    if (!current) return;
+    if (!current.diagram) current.diagram = {};
+    current.diagram.zoom = erState.zoom;
+    await fetch(`/api/databases/${DB_ID}`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({diagram: current.diagram})});
+  }
+
+  async function autoLayout(){
+    const state = await fetchState();
+    const db = state[DB_ID];
+    const d = db.diagram || (db.diagram={});
+    d.positions = {};
+    await fetch(`/api/databases/${DB_ID}`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({diagram: d})});
+    refresh();
+  }
+
+  function fitView(){
+    // simple fit: reset transform
+  erState.panX = 0; erState.panY = 0; erState.zoom = 1; const g = document.querySelector('#er-canvas svg g'); if (g) applyTransform(g);
+    saveDiagram();
+  }
+</script>
+{% endblock %}

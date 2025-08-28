@@ -1,0 +1,161 @@
+{
+  "9e70aedf": {
+    "id": "9e70aedf",
+    "name": "ValorStone CH3 System",
+    "note": "The full database structure used for everything stored in the new system.",
+    "tables": {
+      "5be7d9bb": {
+        "id": "5be7d9bb",
+        "name": "Person",
+        "note": "Table for characters",
+        "columns": {
+          "d3183855": {
+            "id": "d3183855",
+            "name": "id",
+            "datatype": "INT",
+            "is_primary": true,
+            "is_nullable": false,
+            "default": null,
+            "note": "The ID that will be used elsewhere to reference the Character",
+            "foreign_ref": null,
+            "order": 0
+          },
+          "026921a1": {
+            "id": "026921a1",
+            "name": "name",
+            "datatype": "TEXT",
+            "is_primary": false,
+            "is_nullable": false,
+            "default": null,
+            "note": "",
+            "foreign_ref": null,
+            "order": 1
+          }
+        }
+      },
+      "da15b97c": {
+        "id": "da15b97c",
+        "name": "User",
+        "note": "",
+        "columns": {
+          "95753b98": {
+            "id": "95753b98",
+            "name": "id",
+            "datatype": "INT",
+            "is_primary": true,
+            "is_nullable": true,
+            "default": null,
+            "note": "",
+            "foreign_ref": null,
+            "order": 0
+          },
+          "0c220db9": {
+            "id": "0c220db9",
+            "name": "discord_id",
+            "datatype": "INT",
+            "is_primary": false,
+            "is_nullable": true,
+            "default": null,
+            "note": "",
+            "foreign_ref": {
+              "table_id": "8fdfbf20",
+              "column_id": "8a7b6d1f",
+              "note": ""
+            },
+            "order": 1
+          }
+        }
+      },
+      "8fdfbf20": {
+        "id": "8fdfbf20",
+        "name": "Discord User",
+        "note": "",
+        "columns": {
+          "8a7b6d1f": {
+            "id": "8a7b6d1f",
+            "name": "id",
+            "datatype": "INT",
+            "is_primary": true,
+            "is_nullable": false,
+            "default": null,
+            "note": "",
+            "foreign_ref": null,
+            "order": 0
+          },
+          "d9514621": {
+            "id": "d9514621",
+            "name": "nickname",
+            "datatype": "VARCHAR(255)",
+            "is_primary": false,
+            "is_nullable": true,
+            "default": null,
+            "note": "",
+            "foreign_ref": null,
+            "order": 1
+          }
+        }
+      }
+    },
+    "links": {},
+    "diagram": {
+      "mode": "circle",
+      "positions": {
+        "5be7d9bb": {
+          "x": 247.52043295098693,
+          "y": 54.94916614666751
+        },
+        "8fdfbf20": {
+          "x": 453.76041297543526,
+          "y": 156.46338272379037
+        },
+        "da15b97c": {
+          "x": 761.6461750217071,
+          "y": 309.52905126608124
+        }
+      },
+      "zoom": 0.8473756617146708
+    }
+  },
+  "doc_folders": {
+    "8cffd959": {
+      "id": "8cffd959",
+      "name": "folder1",
+      "parent_id": null
+    }
+  },
+  "documents": {
+    "0d4f030a": {
+      "id": "0d4f030a",
+      "name": "test1",
+      "parent_id": null,
+      "content": "# test1\n\n## Hello!\n\nthis is a document\n\n[ValorStone CH3 System]([[db:9e70aedf:valorstone-ch3-system]])\n[test1]([[doc:0d4f030a#test1]])\n[Example heading]([[doc:4a2c383d#example-heading]])\n\nThis is a lsit:\n- AAA\n- BBB\n    - AAA\n    - BBB\n- AAA\n\n\n\n1. Test\n2. Test\n    1. Sub test\n    2. Sub test\n",
+      "notes": {
+        "cf437177": {
+          "id": "cf437177",
+          "start_line": 13,
+          "end_line": 13,
+          "text": "This is a note",
+          "author": "",
+          "created_at": 1756400973.1987102
+        },
+        "abb9b1b9": {
+          "id": "abb9b1b9",
+          "start_line": 13,
+          "end_line": 13,
+          "text": "This is another note",
+          "author": "",
+          "created_at": 1756400983.0571375
+        }
+      },
+      "updated_at": 1756400983.0571375
+    },
+    "4a2c383d": {
+      "id": "4a2c383d",
+      "name": "test2",
+      "parent_id": "8cffd959",
+      "content": "# test2\n\nStart writing...\n\n## Example heading",
+      "notes": {},
+      "updated_at": 1756400973.1987102
+    }
+  }
+}
