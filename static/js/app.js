@@ -23,13 +23,14 @@ const Modal = {
     f.innerHTML = '';
     for (const act of actions){
       const btn = document.createElement('button');
-      btn.className = 'btn ' + (act.className || '');
+      btn.className = 'btn ' + (act.className || '') + (act.primary ? ' primary' : '');
       btn.textContent = act.label || 'OK';
       btn.type = 'button';
       btn.onclick = async (ev)=>{ ev.preventDefault(); const res = await act.onClick?.(); if (res !== false) Modal.close(); };
       f.appendChild(btn);
     }
     root.hidden = false;
+    return ()=> Modal.close();
   },
   close(){
     const root = document.getElementById('modal-root');

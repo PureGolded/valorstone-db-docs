@@ -82,7 +82,8 @@
       const lineNotes = Object.values(DOC.notes||{}).filter(n=> lineNo >= n.start_line && lineNo <= n.end_line).sort((a,b)=> a.created_at-b.created_at);
       if (lineNotes.length){
         const badge = document.createElement('span'); badge.className='note-badge'; badge.textContent = String(lineNotes.length);
-        badge.title = lineNotes.slice(0,3).map(n=> `[${new Date(n.created_at*1000).toLocaleString()}] ${(n.author||'')}: ${n.text}`).join('\n') + (lineNotes.length>3? `\n(+${lineNotes.length-3} more)` : '');
+        // rich HTML tooltip preview
+        badge.setAttribute('data-tooltip-html', buildNotesTooltipHTML(lineNotes));
         badge.addEventListener('click', (ev)=>{ ev.stopPropagation(); showNotes(lineNo); });
         num.appendChild(badge);
       }
@@ -90,7 +91,11 @@
       const text = document.createElement('div'); text.className='code-text'; text.innerHTML = renderMarkdownLine(ln);
       // note indicators
       const hasNotes = Object.values(DOC.notes||{}).some(n=> (i+1) >= n.start_line && (i+1) <= n.end_line);
-      if (hasNotes){ num.classList.add('has-notes'); num.title='Notes on this line'; }
+      if (hasNotes){
+        num.classList.add('has-notes');
+        // show notes preview when hovering the line number
+        num.setAttribute('data-tooltip-html', buildNotesTooltipHTML(lineNotes));
+      }
       // link clicks
       text.querySelectorAll('a[data-link]').forEach(a=> a.addEventListener('click', (ev)=> handleLinkClick(ev, a)));
       // click line number to view/add notes
@@ -276,20 +281,95 @@
   }
 
   async function addNoteForLine(line){
-    const text = prompt(`Note for line ${line}`); if (!text) return;
-    await addNoteForRange(line, line, text);
+    openNoteModal(line, line);
   }
 
   async function addNoteForRange(start, end, textOpt){
-    const text = textOpt || prompt(`Note for lines ${start}-${end}`); if (!text) return;
-    const payload = {start_line: start, end_line: end, text, author: ''};
+    // textOpt can be a string or { text, author }
+    let noteText = '';
+    let author = '';
+    if (typeof textOpt === 'object' && textOpt !== null){
+      noteText = textOpt.text || '';
+      author = textOpt.author || '';
+    } else {
+      noteText = textOpt || '';
+    }
+    if (!noteText) return;
+    const payload = {start_line: start, end_line: end, text: noteText, author};
     let res;
     if (IS_SHARED){
       res = await fetch(`/api/shared/d/${SHARE.id}/${DOC.id}/notes`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
     } else {
       res = await fetch(`/api/docs/${DOC.id}/notes`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
     }
-    if (res.ok){ const j = await res.json(); DOC.notes = DOC.notes || {}; DOC.notes[j.note.id] = j.note; renderEditor(); }
+    if (res.ok){
+      const j = await res.json();
+      DOC.notes = DOC.notes || {};
+      DOC.notes[j.note.id] = j.note;
+      // re-render to refresh badges and tooltips
+      docRender();
+    }
+  }
+
+  function openNoteModal(start, end){
+    const body = document.createElement('div');
+    body.innerHTML = `
+      <div class="col" style="gap:.5rem;">
+        <div class="row" style="gap:.5rem; align-items:center;">
+          <span class="note">Lines ${start}${end && end!==start ? '–'+end : ''}</span>
+        </div>
+        <input id="noteAuthor" type="text" placeholder="Your name (optional)" />
+        <textarea id="noteText" rows="5" placeholder="Write a note..."></textarea>
+      </div>
+    `;
+    // prefill author from localStorage
+    setTimeout(()=>{
+      const savedAuthor = localStorage.getItem('doc_author') || '';
+      const a = body.querySelector('#noteAuthor'); if (a) a.value = savedAuthor;
+      const t = body.querySelector('#noteText'); if (t) t.focus();
+    }, 0);
+    let submitBtn;
+    const close = Modal.open({
+      title: 'Add a note',
+      body,
+      actions: [
+        {label:'Cancel'},
+        {label:'Add Note', primary:true, onClick: async ()=>{
+          const a = body.querySelector('#noteAuthor');
+          const t = body.querySelector('#noteText');
+          const author = a ? a.value.trim() : '';
+          const text = t ? t.value.trim() : '';
+          if (!text){
+            if (t) t.focus();
+            return;
+          }
+          try {
+            if (a) localStorage.setItem('doc_author', author);
+            submitBtn && (submitBtn.disabled = true);
+            await addNoteForRange(start, end, {text, author});
+            close();
+          } catch (e){ console.error('Failed to add note', e); }
+        }}
+      ]
+    });
+    // capture reference to submit button to disable on submit
+    const actions = body.parentElement?.querySelectorAll?.('.modal-footer .btn') || [];
+    submitBtn = actions[actions.length-1];
+  }
+
+  function buildNotesTooltipHTML(notes){
+    try {
+      const list = (notes || []).slice().sort((a,b)=> a.created_at-b.created_at);
+      const shown = list.slice(0,3).map(n => {
+        const by = escapeHtml(n.author||'Note');
+        const when = new Date(n.created_at*1000).toLocaleString();
+        const txt = escapeHtml(n.text||'').replace(/\n/g,'<br>');
+        return `<div class="tooltip-note"><div class="row space-between"><strong>${by}</strong><span class="note">${when}</span></div><div class="note-text">${txt}</div></div>`;
+      }).join('');
+      const more = list.length>3 ? `<div class="note">+${list.length-3} more…</div>` : '';
+      const hint = `<div class="note">Click the badge to view all</div>`;
+      return `<div class="tooltip-notes">${shown}${more}${hint}</div>`;
+    } catch(e){ console.warn('tooltip build failed', e); return ''; }
   }
 
   function getContentFromEditor(){

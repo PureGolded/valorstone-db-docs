@@ -149,6 +149,11 @@ textarea { background: #0e1219; border:1px solid var(--border); color:var(--text
 
 /* Floating tooltip (JS-managed) */
 .tooltip { position: fixed; z-index: 9999; pointer-events: none; background:#0e1219; color:#cbd5e1; border:1px solid var(--border); padding:.25rem .5rem; border-radius:.3rem; font-size:.8rem; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+/* Rich notes tooltip content */
+.tooltip .tooltip-notes { max-width: 420px; display:flex; flex-direction:column; gap:.25rem; }
+.tooltip .tooltip-note { border-bottom:1px dashed rgba(255,255,255,.06); padding-bottom:.25rem; margin-bottom:.25rem; }
+.tooltip .tooltip-note:last-child { border-bottom:0; margin-bottom:0; padding-bottom:0; }
+.tooltip .tooltip-note .note-text { color:#e7eaf0; }
 
 /* Docs tree */
 .docs-tree { --indent: 1rem; }
