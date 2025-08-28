@@ -1,10 +1,10 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="row space-between">
-  <div class="row" style="gap:.5rem; align-items: center;">
-    <a class="btn" href="/workspace">← Back</a>
-    <h1 id="db-name">{{ db.name }}</h1>
-  </div>
+  <div class="row space-between">
+    <div class="row" style="gap:.5rem; align-items: center;">
+      <a class="btn" href="/workspace"><i class="ri-arrow-left-line"></i> Back</a>
+    </div>
+    <h1 id="db-name" style="margin:0; text-align:center; flex:1;">{{ db.name }}</h1>
   <div class="row" style="gap:.5rem;">
     <button class="btn" title="Rename this database" onclick="promptRenameDb()">Rename</button>
     <button class="btn" title="Edit a note/description for this database" onclick="editDbNote()">Note</button>
@@ -17,17 +17,17 @@
 <div class="stack">
   <div class="card">
     <div class="row space-between">
-      <h2 title="Tables hold columns. Each row in a table is a record.">Tables</h2>
-      <button class="btn primary" title="Add a table to this database" onclick="createTable()">+ Table</button>
+      <h2 class="left-title" title="Tables hold columns. Each row in a table is a record.">Tables</h2>
+  <button class="btn primary" title="Add a table to this database" onclick="createTable()"><i class="ri-add-line"></i> Table</button>
     </div>
     <div id="table-list"></div>
   </div>
-  <div class="card">
+  <div class="card" style="margin-top:.75rem;">
     <div class="row space-between">
-      <h2 title="Visual map of tables and their references">ER Diagram</h2>
+      <h2 class="left-title" title="Visual map of tables and their references">ER Diagram</h2>
       <div class="row" style="gap:.5rem;">
-        <button class="btn" title="Auto-arrange tables" onclick="autoLayout()">Auto layout</button>
-        <button class="btn" title="Fit all tables to view" onclick="fitView()">Fit</button>
+        <button class="btn" title="Auto-arrange tables" onclick="autoLayout()"><i class="ri-magic-line"></i> Auto layout</button>
+        <button class="btn" title="Fit all tables to view" onclick="fitView()"><i class="ri-aspect-ratio-line"></i> Fit</button>
       </div>
     </div>
   <div id="er-canvas" class="er-canvas" tabindex="0"></div>
@@ -124,24 +124,42 @@
       root.innerHTML = '<div class="muted">No tables yet.</div>';
       return;
     }
+    // Compute FK incoming/outgoing counts per table
+    const incoming = {}; // tableId -> count of other tables referencing this table
+    const outgoing = {}; // tableId -> count of columns in this table referencing others
+    for (const [tid, t] of Object.entries(db.tables)){
+      outgoing[tid] = 0; incoming[tid] = incoming[tid] || 0;
+      for (const [, c] of Object.entries(t.columns||{})){
+        if (c.foreign_ref && db.tables[c.foreign_ref.table_id]){
+          outgoing[tid] = (outgoing[tid]||0) + 1;
+          incoming[c.foreign_ref.table_id] = (incoming[c.foreign_ref.table_id]||0) + 1;
+        }
+      }
+    }
     for (const [tId, t] of entries) {
       const el = document.createElement('div');
       el.className = 'subcard';
+      const colCount = Object.keys(t.columns||{}).length;
+      const outCount = outgoing[tId] || 0;
+      const inCount = incoming[tId] || 0;
       el.innerHTML = `
         <div class="row space-between">
           <div>
             <strong>${escapeHtml(t.name)}</strong>
+            <span class="badge" data-tooltip="Columns in this table">${colCount} cols</span>
+            ${outCount ? `<span class=\"badge\" data-tooltip=\"Foreign keys from this table to others\">FK→ ${outCount}</span>` : ''}
+            ${inCount ? `<span class=\"badge\" data-tooltip=\"Foreign keys from other tables referencing this table\">FK← ${inCount}</span>` : ''}
             <span class="note">${escapeHtml(t.note || '')}</span>
           </div>
           <div class="row" style="gap:.25rem;">
-            <button class="btn" onclick="renameTable('${tId}', '${encodeURIComponent(t.name)}')">Rename</button>
-            <button class="btn" onclick="noteTable('${tId}')">Note</button>
-            <button class="btn danger" onclick="deleteTable('${tId}')">Delete</button>
+            <button class="btn icon" data-tooltip="Rename table" onclick="renameTable('${tId}', '${encodeURIComponent(t.name)}')"><i class="ri-edit-line"></i></button>
+            <button class="btn icon" data-tooltip="Edit table note" onclick="noteTable('${tId}')"><i class="ri-sticky-note-line"></i></button>
+            <button class="btn icon danger" data-tooltip="Delete table" onclick="deleteTable('${tId}')"><i class="ri-delete-bin-6-line"></i></button>
           </div>
         </div>
         <div class="columns" id="cols-${tId}"></div>
         <div class="row" style="gap:.5rem;">
-          <button class="btn" onclick="createColumn('${tId}')">+ Column</button>
+          <button class="btn" data-tooltip="Add a new column to this table" onclick="createColumn('${tId}')"><i class="ri-add-line"></i> Column</button>
         </div>
       `;
   root.appendChild(el);
@@ -175,14 +193,21 @@
       const el = document.createElement('div');
       el.className = 'column-row';
       const ref = c.foreign_ref;
+      let refTip = '';
+      if (ref){
+        const tTo = db.tables[ref.table_id];
+        const cTo = tTo && tTo.columns[ref.column_id];
+        if (tTo && cTo) refTip = `References ${escapeHtml(tTo.name)}.${escapeHtml(cTo.name)}`;
+        else refTip = 'Reference: This column points to another table\'s identifier (a foreign key).';
+      }
       const props = [
-        c.is_primary ? '<span class="icon warn" data-tooltip="Primary Key: Uniquely identifies each row in this table (like an ID).">🔑</span>' : '',
-        !c.is_nullable ? '<span class="icon deny" data-tooltip="Required: This column must always have a value (cannot be empty).">●</span>' : '',
+        c.is_primary ? '<span class="icon warn" data-tooltip="Primary Key: Uniquely identifies each row in this table (like an ID)."><i class="ri-key-line"></i></span>' : '',
+        !c.is_nullable ? '<span class="icon deny" data-tooltip="Required: This column must always have a value (cannot be empty)."><i class="ri-checkbox-blank-circle-fill"></i></span>' : '',
         c.default ? `<span class='badge' data-tooltip="Default: Value used when no input is provided.">DEF=${escapeHtml(c.default)}</span>` : '',
-        ref ? '<span class="icon warn" data-tooltip="Reference: This column points to another table\'s identifier (a foreign key).">↗</span>' : ''
+        ref ? `<span class=\"icon warn\" data-tooltip=\"${refTip}\"><i class=\"ri-share-forward-line\"></i></span>` : ''
       ].filter(Boolean).join(' ');
 
-      const noteIcon = c.note ? `<span class="icon" data-tooltip="${escapeHtml(c.note)}">i</span>` : '';
+  const noteIcon = c.note ? `<span class="icon" data-tooltip="${escapeHtml(c.note)}"><i class="ri-information-line"></i></span>` : '';
 
       el.style.setProperty('--name-w', nameW + 'px');
       el.style.setProperty('--type-w', typeW + 'px');
@@ -193,9 +218,9 @@
         </div>
         <div><span class="badge" data-tooltip="Datatype: The kind of data stored here.">${escapeHtml(c.datatype)}</span></div>
         <div class="row" style="gap:.25rem; align-items:center; min-width:0;">${props}</div>
-  <div class="row actions" style="gap:.25rem;">
-          <button class="btn" title="Edit column properties and reference" onclick="editColumn('${tId}', '${cId}')">Edit</button>
-          <button class="btn danger" onclick="deleteColumn('${tId}', '${cId}')">Delete</button>
+        <div class="row actions" style="gap:.4rem;">
+          <button class="btn icon" data-tooltip="Edit column properties and reference" onclick="editColumn('${tId}', '${cId}')"><i class="ri-pencil-line"></i></button>
+          <button class="btn icon danger" data-tooltip="Delete column" onclick="deleteColumn('${tId}', '${cId}')"><i class="ri-delete-bin-6-line"></i></button>
         </div>
       `;
       root.appendChild(el);
@@ -390,6 +415,17 @@
   label.dataset.baseSize = '12';
       label.textContent = t.name;
       group.appendChild(label);
+      // Node tooltip with counts (columns, FK out/in)
+      (function(){
+        const colCountN = Object.keys(t.columns||{}).length;
+        let outN = 0; let inN = 0;
+        for (const [, c] of Object.entries(t.columns||{})) if (c.foreign_ref) outN++;
+        for (const [tid2, t2] of Object.entries(db.tables)){
+          if (tid2 === tId) continue;
+          for (const [, c2] of Object.entries(t2.columns||{})) if (c2.foreign_ref && c2.foreign_ref.table_id === tId) inN++;
+        }
+        group.setAttribute('data-tooltip', `${t.name} • ${colCountN} cols${outN?` • FK→ ${outN}`:''}${inN?` • FK← ${inN}`:''}`);
+      })();
       // Build edges based on columns (no column rendering)
       let colsList = Object.entries(t.columns);
       colsList.sort((a,b)=>{
@@ -427,6 +463,16 @@
       path.setAttribute('stroke-width', '2');
       path.setAttribute('opacity', '0.9');
       path.setAttribute('marker-end', 'url(#arrow-head)');
+      // Tooltip for edge: fromTable.fromColumn → toTable.toColumn
+      (function(){
+        const fromT = db.tables[e.from.t];
+        const fromC = fromT && fromT.columns[e.from.c];
+        const toT = db.tables[e.to.t];
+        const toC = toT && toT.columns[e.to.c];
+        if (fromT && fromC && toT && toC){
+          path.setAttribute('data-tooltip', `${fromT.name}.${fromC.name} → ${toT.name}.${toC.name}`);
+        }
+      })();
       g.insertBefore(path, g.firstChild.nextSibling);
       // label near midpoint
   const tTo = db.tables[e.to.t];

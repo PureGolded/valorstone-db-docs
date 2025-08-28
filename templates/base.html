@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>DB Designer</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" />
   {% block meta %}{% endblock %}
 </head>
 <body>
@@ -14,8 +15,8 @@
       <div class="pin">PIN: <strong>{{ pin }}</strong></div>
     {% endif %}
     <nav class="nav">
-      <a href="{{ url_for('workspace') }}">Workspace</a>
-  <a href="{{ url_for('docs_home') }}">Docs</a>
+      <a class="btn nav-btn" href="{{ url_for('workspace') }}" title="Go to workspace">Workspace</a>
+      <a class="btn nav-btn" href="{{ url_for('docs_home') }}" title="Open documents">Docs</a>
     </nav>
   </header>
   <main class="container">

@@ -8,8 +8,7 @@
 {% block content %}
 <div class="row space-between">
   <div class="row" style="gap:.5rem; align-items:center;">
-    <a class="btn" href="{{ '/docs' if not is_shared else '/' }}">← Back</a>
-    <h1 id="doc-name">{{ doc.name }}</h1>
+    <a class="btn" href="{{ '/docs' if not is_shared else '/' }}"><i class="ri-arrow-left-line"></i> Back</a>
   </div>
   <div class="row" style="gap:.5rem;">
     {% if can_edit %}
@@ -20,9 +19,9 @@
   </div>
 </div>
 
-<div class="card">
+<div class="card" style="margin-top:.75rem;">
   <div class="row space-between">
-    <h2>Document</h2>
+    <h2 class="left-title" id="doc-title">{{ doc.name }}</h2>
     <div class="row" style="gap:.5rem; align-items:center;">
       <span id="docUpdated" class="note"></span>
       {% if not can_edit %}<span class="badge">Read-only</span>{% endif %}
@@ -31,7 +30,7 @@
   <div class="row space-between" style="align-items:center; margin-bottom:.5rem;">
     <div id="saveStatus" class="note" style="visibility:hidden;">Saved</div>
   </div>
-  <div id="doc-editor" class="doc-editor"></div>
+  <div id="doc-editor" class="doc-editor" style="margin-top:.25rem;"></div>
 </div>
 {% endblock %}
 {% block scripts %}
@@ -124,6 +123,8 @@
     });
     container.addEventListener('mouseleave', ()=>{ lnoEls.forEach(el=> el.classList.remove('visible')); });
     root.appendChild(container);
+  // annotate link previews
+  if (window.__annotateLinkTooltips) window.__annotateLinkTooltips(container);
   }
 
   function renderEdit(){
@@ -170,6 +171,8 @@
     });
     updateGutter();
     syncScroll();
+  // annotate link previews for any inline existing links (if any)
+  if (window.__annotateLinkTooltips) window.__annotateLinkTooltips(wrap);
   }
 
   function renderLineHTML(ln){

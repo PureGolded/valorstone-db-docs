@@ -1,13 +1,13 @@
 {% extends 'base.html' %}
 {% set pin = pin %}
 {% block content %}
-<div class="toolbar">
-  <button class="btn primary" data-tooltip="Create a new database design to hold tables and columns" onclick="createDatabase()">+ New Database</button>
-  <a class="btn" href="/docs">Open Docs</a>
+<div class="toolbar" style="gap:.5rem;">
+  <button class="btn primary" data-tooltip="Create a new database design to hold tables and columns" onclick="createDatabase()"><i class="ri-add-line"></i> New Database</button>
+  <a class="btn" href="/docs"><i class="ri-book-2-line"></i> Open Docs</a>
 </div>
 <div id="db-list" class="stack"></div>
 <div style="margin-top:1rem; display:flex; justify-content:center;">
-  <a class="btn primary" style="font-size:1.1rem; padding: .75rem 1.25rem;" href="/docs">⇨ Go to Documents</a>
+  <a class="btn primary" style="font-size:1.1rem; padding: .75rem 1.25rem; display:inline-flex; align-items:center; gap:.5rem;" href="/docs"><i class="ri-arrow-right-line"></i> Go to Documents</a>
   </div>
 {% endblock %}
 
@@ -60,11 +60,11 @@
       el.className = 'card';
       el.innerHTML = `
         <div class="row space-between" style="gap:1rem; align-items:center;">
-          <h2 title="A collection of tables and relationships" style="margin:0;">${escapeHtml(db.name)}</h2>
+          <h2 title="A collection of tables and relationships" style="margin:0; text-align:left;">${escapeHtml(db.name)}</h2>
           <div class="row" style="gap: .5rem; flex-wrap: wrap;">
-            <button class="btn" title="Create a copy of this database design" onclick="duplicateDb('${id}')">Duplicate</button>
-            <a class="btn" title="Open and edit this database" href="/db/${id}">Open</a>
-            <button class="btn danger" title="Delete this database design" onclick="deleteDatabase('${id}')">Delete</button>
+            <button class="btn" title="Create a copy of this database design" onclick="duplicateDb('${id}')"><i class="ri-file-copy-line"></i> Duplicate</button>
+            <a class="btn" title="Open and edit this database" href="/db/${id}"><i class="ri-edit-2-line"></i> Open</a>
+            <button class="btn danger" title="Delete this database design" onclick="deleteDatabase('${id}')"><i class="ri-delete-bin-6-line"></i> Delete</button>
           </div>
         </div>
         <p class="note">${escapeHtml(db.note || '')}</p>

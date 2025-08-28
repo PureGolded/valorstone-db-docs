@@ -8,13 +8,13 @@
 {% block content %}
 <div class="row space-between">
   <div class="row" style="gap:.5rem; align-items:center;">
-    <a class="btn" href="{{ ('/s/f/' + share.id) if share else '/workspace' }}">← Back</a>
+    <a class="btn" href="{{ ('/s/f/' + share.id) if share else '/workspace' }}"><i class="ri-arrow-left-line"></i> Back</a>
     <h1>Documents</h1>
   </div>
   {% if can_edit %}
   <div class="row" style="gap:.5rem;">
-    <button id="newFolderBtn" class="btn" title="Create folder">📁+</button>
-    <button id="newDocBtn" class="btn primary" title="Create document">📄+</button>
+    <button id="newFolderBtn" class="btn" title="Create folder"><i class="ri-folder-add-line"></i> New Folder</button>
+    <button id="newDocBtn" class="btn primary" title="Create document"><i class="ri-file-add-line"></i> New Document</button>
   </div>
   {% endif %}
 </div>
@@ -25,12 +25,12 @@
 <div class="stack">
   <div class="card">
     <div class="row space-between">
-      <h2>All Folders & Documents</h2>
+      <h2>All Files & Folders</h2>
       <div class="row" style="gap:.5rem;">
-        <button class="btn" title="Expand all" onclick="expandAll()">▾▾</button>
-        <button class="btn" title="Collapse all" onclick="collapseAll()">▸▸</button>
+        <button class="btn icon" title="Expand all" onclick="expandAll()"><i class="ri-arrow-down-s-line"></i></button>
+        <button class="btn icon" title="Collapse all" onclick="collapseAll()"><i class="ri-arrow-right-s-line"></i></button>
         {% if can_edit %}
-        <button class="btn" title="Share root" onclick="shareRoot()">🔗</button>
+        <button class="btn icon" title="Share root" onclick="shareRoot()"><i class="ri-link"></i></button>
         {% endif %}
       </div>
     </div>
@@ -84,7 +84,7 @@ function renderTree(idx){
   function nodeRow(icon, name, controls){
     const row = document.createElement('div');
     row.className = 'node-row';
-    row.appendChild(Object.assign(document.createElement('span'), {className:'icon', textContent: icon}));
+    const ic = document.createElement('span'); ic.className='icon'; ic.innerHTML = icon; row.appendChild(ic);
     const nameSpan = Object.assign(document.createElement('span'), {className:'name'});
     nameSpan.textContent = name;
     row.appendChild(nameSpan);
@@ -101,18 +101,18 @@ function renderTree(idx){
 
   function btn(label, cls, onClick, title){
     const b = document.createElement('button');
-    b.className = 'btn '+(cls||''); b.textContent = label; if(title) b.title = title; b.addEventListener('click', onClick); return b;
+    b.className = 'btn '+(cls||''); b.innerHTML = label; if(title) b.title = title; b.addEventListener('click', onClick); return b;
   }
 
   function renderFolder(f){
     const li = document.createElement('li'); li.className = 'node folder';
-    const twisty = Object.assign(document.createElement('span'), {className:'twisty', textContent: '▸'});
+  const twisty = document.createElement('span'); twisty.className='twisty'; twisty.innerHTML = '<i class="ri-arrow-right-s-line"></i>';
     twisty.addEventListener('click', ()=> li.classList.toggle('expanded'));
   const header = document.createElement('div'); header.className = 'node-header';
   header.appendChild(twisty);
     // title and name
     const nameWrap = document.createElement('div'); nameWrap.className = 'node-row';
-    nameWrap.appendChild(Object.assign(document.createElement('span'), {className:'icon', textContent:'📁'}));
+  const fIcon = document.createElement('span'); fIcon.className='icon'; fIcon.innerHTML = '<i class="ri-folder-2-line"></i>'; nameWrap.appendChild(fIcon);
     const nameSpan = Object.assign(document.createElement('span'), {className:'name'});
     nameSpan.textContent = f.name;
     nameWrap.appendChild(nameSpan);
@@ -120,17 +120,17 @@ function renderTree(idx){
     // action icons (left group)
     if (CAN_EDIT){
       const left = actions([
-        btn('✏️','', ()=> renameFolder(f.id), 'Rename'),
-        btn('🔀','', ()=> moveFolder(f.id), 'Move'),
-        btn('🔗','', ()=> shareFolder(f.id), 'Share'),
-        btn('🗑️','danger', ()=> deleteFolder(f.id), 'Delete'),
+        btn('<i class="ri-pencil-line"></i>','', ()=> renameFolder(f.id), 'Rename'),
+        btn('<i class="ri-drag-move-2-line"></i>','', ()=> moveFolder(f.id), 'Move'),
+        btn('<i class="ri-link"></i>','', ()=> shareFolder(f.id), 'Share'),
+        btn('<i class="ri-delete-bin-6-line"></i>','danger', ()=> deleteFolder(f.id), 'Delete'),
       ]);
       left.classList.add('left');
       header.appendChild(left);
       // create group (right)
       const create = actions([
-        btn('📁+','', ()=> newFolder(f.id), 'Create folder inside'),
-        btn('📄+','primary', ()=> newDoc(f.id), 'Create document inside'),
+        btn('<i class="ri-folder-add-line"></i>','', ()=> newFolder(f.id), 'Create folder inside'),
+        btn('<i class="ri-file-add-line"></i>','primary', ()=> newDoc(f.id), 'Create document inside'),
       ]);
       create.classList.add('create');
       header.appendChild(create);
@@ -151,22 +151,27 @@ function renderTree(idx){
   function renderDoc(d){
     const li = document.createElement('li'); li.className = 'node doc';
     const link = IS_SHARED ? `/s/f/${SHARE.id}/d/${d.id}` : `/docs/d/${d.id}`;
+    // Build a header-like row to align with folders: placeholder twisty + content
+    const header = document.createElement('div'); header.className = 'node-header';
+    const placeholder = document.createElement('span'); placeholder.className = 'twisty placeholder'; placeholder.innerHTML = '<i class="ri-arrow-right-s-line"></i>';
+    header.appendChild(placeholder);
     const a = document.createElement('a'); a.href = link; a.className = 'doc-link';
-  const row = nodeRow('📄', d.name, null);
-  const updated = document.createElement('span'); updated.className = 'note'; updated.style.marginLeft = '.5rem';
-  if (d.updated_at){ updated.textContent = new Date(d.updated_at*1000).toLocaleString(); }
-  row.appendChild(updated);
+    const row = nodeRow('<i class="ri-file-text-line"></i>', d.name, null);
+    const updated = document.createElement('span'); updated.className = 'note'; updated.style.marginLeft = '.5rem';
+    if (d.updated_at){ updated.textContent = new Date(d.updated_at*1000).toLocaleString(); }
+    row.appendChild(updated);
     if (CAN_EDIT){
       const left = actions([
-        btn('✏️','', (ev)=>{ ev.preventDefault(); renameDoc(d.id); }, 'Rename'),
-        btn('🔀','', (ev)=>{ ev.preventDefault(); moveDoc(d.id); }, 'Move'),
-        btn('🔗','', (ev)=>{ ev.preventDefault(); shareDoc(d.id); }, 'Share'),
-        btn('🗑️','danger', (ev)=>{ ev.preventDefault(); deleteDoc(d.id); }, 'Delete'),
+        btn('<i class="ri-pencil-line"></i>','', (ev)=>{ ev.preventDefault(); renameDoc(d.id); }, 'Rename'),
+        btn('<i class="ri-drag-move-2-line"></i>','', (ev)=>{ ev.preventDefault(); moveDoc(d.id); }, 'Move'),
+        btn('<i class="ri-link"></i>','', (ev)=>{ ev.preventDefault(); shareDoc(d.id); }, 'Share'),
+        btn('<i class="ri-delete-bin-6-line"></i>','danger', (ev)=>{ ev.preventDefault(); deleteDoc(d.id); }, 'Delete'),
       ]);
       row.appendChild(left);
     }
     a.appendChild(row);
-    li.appendChild(a);
+    header.appendChild(a);
+    li.appendChild(header);
     return li;
   }
 

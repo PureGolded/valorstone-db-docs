@@ -105,57 +105,61 @@
           "y": 54.94916614666751
         },
         "8fdfbf20": {
-          "x": 453.76041297543526,
-          "y": 156.46338272379037
+          "x": 277.5163841418198,
+          "y": 243.1704391735753
         },
         "da15b97c": {
-          "x": 761.6461750217071,
-          "y": 309.52905126608124
+          "x": 622.0292725889205,
+          "y": 198.10828803498498
         }
       },
-      "zoom": 0.8473756617146708
+      "zoom": 1.1388667526101348
     }
   },
   "doc_folders": {
-    "8cffd959": {
-      "id": "8cffd959",
-      "name": "folder1",
+    "602230e8": {
+      "id": "602230e8",
+      "name": "Folder for Guide",
       "parent_id": null
+    },
+    "80364ee0": {
+      "id": "80364ee0",
+      "name": "Folder in folder",
+      "parent_id": "602230e8"
     }
   },
   "documents": {
-    "0d4f030a": {
-      "id": "0d4f030a",
-      "name": "test1",
+    "bd98fae3": {
+      "id": "bd98fae3",
+      "name": "Guide",
       "parent_id": null,
-      "content": "# test1\n\n## Hello!\n\nthis is a document\n\n[ValorStone CH3 System]([[db:9e70aedf:valorstone-ch3-system]])\n[test1]([[doc:0d4f030a#test1]])\n[Example heading]([[doc:4a2c383d#example-heading]])\n\nThis is a lsit:\n- AAA\n- BBB\n    - AAA\n    - BBB\n- AAA\n\n\n\n1. Test\n2. Test\n    1. Sub test\n    2. Sub test\n",
-      "notes": {
-        "cf437177": {
-          "id": "cf437177",
-          "start_line": 13,
-          "end_line": 13,
-          "text": "This is a note",
-          "author": "",
-          "created_at": 1756400973.1987102
-        },
-        "abb9b1b9": {
-          "id": "abb9b1b9",
-          "start_line": 13,
-          "end_line": 13,
-          "text": "This is another note",
-          "author": "",
-          "created_at": 1756400983.0571375
-        }
-      },
-      "updated_at": 1756401403.5162609
-    },
-    "4a2c383d": {
-      "id": "4a2c383d",
-      "name": "test2",
-      "parent_id": "8cffd959",
-      "content": "# test2\n\nStart writing...\n\n## Example heading",
+      "content": "# A guide to use this system\n\nSo this document system is all you would want.\n\n## Databases\n\n- Create: Workspace \u2192 New Database\n- Tables: + Table; Rename / Note / Delete from row actions\n- Columns: + Column; set Name, Type, PK, Null, Default, Reference (FK). Hover icons for hints\n- ER Diagram:\n    - Pan/Zoom: drag background / mouse wheel\n    - Move: drag tables\n    - Auto layout / Fit: top-right buttons\n    - Edges: directional and labeled (from_table.col \u2192 to_table.col)\n\n## Docs\n\n- Create: Docs \u2192 New Folder / New Document\n- Organize: Expand/Collapse folders; Move/Rename/Delete via row actions\n- Edit vs Read:\n    - Edit: simple editor, Tab = 4 spaces, Ctrl+S saves (auto-save after typing)\n    - Read: compact view with line numbers on hover\n- Notes:\n    - Badges show count (always visible)\n    - Hover line number: quick preview\n    - Click badge: all notes modal\n    - Click line: add note (modal)\n- Linking:\n    - Press $ while editing to insert links to docs/headings or DB entities (db/table/column)\n- Sharing:\n    - Share read-only links for docs or folders\n- Status:\n    - \u201cSaved\u201d shows briefly on save; \u201cLast updated\u201d appears on docs\n\n## References\n\n- Using the dollar character in chat will popup a modal where you can select and search for things to refer to.\n- It includes: Databases, tables, columns, Documents, headings in documents.\n- If you enter edit mode, you can see how it looks in edit, but it won't tell you much.\n- Few examples:\n    - [Document in folder 1]([[doc:c0d78e1c]]) - a file even in folder.\n    - [Deeper Doc]([[doc:d9694092#deeper-doc]]) - a heading reference!\n    - [ValorStone CH3 System]([[db:9e70aedf:valorstone-ch3-system]]) - Reference a whole database!\n    - [id]([[col:9e70aedf:5be7d9bb:d3183855:person.id]]) - or even an item in a database.\n- People with shared link that does not cover referenced files cannot access them, so don't worry.\n- You can try yourself in here or in [Try it out!]([[doc:bb512d96]])",
       "notes": {},
-      "updated_at": 1756400973.1987102
+      "updated_at": 1756404894.712101
+    },
+    "bb512d96": {
+      "id": "bb512d96",
+      "name": "Try it out!",
+      "parent_id": null,
+      "content": "# Try it out!\n\nStart writing...\n[Docs]([[doc:bd98fae3#docs]])\n[Deeper Doc]([[doc:d9694092#deeper-doc]])\n[nickname]([[col:9e70aedf:8fdfbf20:d9514621:discord-user.nickname]])\n[User]([[table:9e70aedf:da15b97c:user]])",
+      "notes": {},
+      "updated_at": 1756406638.7560465
+    },
+    "c0d78e1c": {
+      "id": "c0d78e1c",
+      "name": "Document in folder 1",
+      "parent_id": "602230e8",
+      "content": "# Document in folder 1\n\nStart writing...\n",
+      "notes": {},
+      "updated_at": 1756404452.7180562
+    },
+    "d9694092": {
+      "id": "d9694092",
+      "name": "Deeper Doc",
+      "parent_id": "80364ee0",
+      "content": "# Deeper Doc\n\nStart writing...\n",
+      "notes": {},
+      "updated_at": 1756404475.1298563
     }
   }
 }
