@@ -112,8 +112,8 @@ textarea { background: #0e1219; border:1px solid var(--border); color:var(--text
 .code-row { display:grid; grid-template-columns: 3rem 1fr; gap:.5rem; padding:.25rem .5rem; align-items: start; border-top:1px solid rgba(255,255,255,.03); }
 .code-row:first-child { border-top: none; }
 .code-lno { color:#9aa3b2; text-align:right; padding-right:.5rem; user-select:none; }
-.code-view .code-lno { opacity: 0; transition: opacity .12s ease; }
-.code-view .code-lno.visible { opacity: .9; }
+.code-view .code-lno .lno-number { opacity: 0; transition: opacity .12s ease; }
+.code-view .code-lno.visible .lno-number { opacity: .9; }
 .code-row:hover { background: rgba(255,255,255,0.03); }
 .code-lno .note-badge { display:inline-block; min-width: 1.1rem; padding:0 .25rem; margin-right:.25rem; border-radius:.3rem; border:1px solid var(--border); background:#2a2330; color:#ffe7b3; text-align:center; font-size:.75rem; line-height:1.1rem; cursor:pointer; opacity:.9; }
 .code-lno .note-badge:hover { opacity: 1; }

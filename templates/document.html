@@ -87,7 +87,10 @@
         badge.addEventListener('click', (ev)=>{ ev.stopPropagation(); showNotes(lineNo); });
         num.appendChild(badge);
       }
-      num.appendChild(document.createTextNode(String(lineNo)));
+  const numSpan = document.createElement('span');
+  numSpan.className = 'lno-number';
+  numSpan.textContent = String(lineNo);
+  num.appendChild(numSpan);
       const text = document.createElement('div'); text.className='code-text'; text.innerHTML = renderMarkdownLine(ln);
       // note indicators
       const hasNotes = Object.values(DOC.notes||{}).some(n=> (i+1) >= n.start_line && (i+1) <= n.end_line);
